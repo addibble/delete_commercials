@@ -1,0 +1,3 @@
+The DejaVu audio fingerprinting library is forked from here:
+https://github.com/worldveil/dejavu
+and modified to work on python 3

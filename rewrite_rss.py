@@ -9,6 +9,7 @@ import os
 import delete_commercials
 import pickle
 from collections import deque
+from itertools import permutations 
 
 input_dir = 'input'
 hash_dir = 'hashes'
@@ -26,6 +27,16 @@ def rewrite_hashes(hashes, newmin):
     for h, ts in hashes:
         new.append((h, ts+newmin))
     return new
+
+def compare_hashes_by_two(hashes):
+    roughs = {}
+    for a, b in permutations(hashes.keys(), 2):
+        print(f'comparing {a} {b}')
+        a_max = hashes[a][-1][1]+1
+        pairs = delete_commercials.make_hash_pairs(hashes[a] + rewrite_hashes(hashes[b], a_max))
+        rough = delete_commercials.detect_rough_commercials(pairs)
+        roughs[a] = [(p,q) for p,q in rough if p < a_max]
+    return roughs
 
 if __name__ == '__main__':
     input_url = sys.argv[1]

@@ -50,24 +50,28 @@ def make_hash_pairs(all_hashes):
             pairs[a].append(b)
     return pairs
 
-def detect_rough_commercials(pairs, gapsize_ms=10000, maxlen=50):
-    l=set()
+def detect_rough_commercials(pairs, gapsize_ms=10000, maxlen=20):
     def r(pivot1, pivot2, stack, maxlen=maxlen):
         for try_pivot1, try_pivot2 in zip(range(pivot1+1,pivot1+maxlen), range(pivot2+1,pivot2+maxlen)):
             if(try_pivot1 in pairs and try_pivot2 in pairs[try_pivot1]):
                 stack.append(try_pivot1)
-                return r(try_pivot1, try_pivot2, stack)
+                return r(try_pivot1, try_pivot2, stack, maxlen=maxlen)
         return stack
 
+    l=deque()
+    prev_max=0
     for pivot1 in sorted(pairs.keys()):
+        if pivot1 < prev_max:
+            continue
         for pivot2 in sorted(pairs[pivot1]):
-            s=r(pivot1, pivot2, [])
+            s=r(pivot1, pivot2, [], maxlen=maxlen)
             # if the repeated segment is over 10 seconds long, add it to the candidate list
             if s and sample_to_msec(max(s) - min(s)) > gapsize_ms:
                 l += s
+                prev_max = max(s)
 
+    sorted_list = sorted(set(l))
     final = deque()
-    sorted_list = sorted(l)
     start_pos = sorted_list[0]
     prev_pos = sorted_list[0]
 

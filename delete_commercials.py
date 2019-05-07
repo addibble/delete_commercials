@@ -50,7 +50,7 @@ def make_hash_pairs(all_hashes):
             pairs[a].append(b)
     return pairs
 
-def detect_rough_commercials(pairs, gapsize_ms=10000, maxlen=20):
+def detect_rough_commercials(pairs, maxlen=10):
     def r(pivot1, pivot2, stack, maxlen=maxlen):
         for try_pivot1, try_pivot2 in zip(range(pivot1+1,pivot1+maxlen), range(pivot2+1,pivot2+maxlen)):
             if(try_pivot1 in pairs and try_pivot2 in pairs[try_pivot1]):
@@ -65,17 +65,20 @@ def detect_rough_commercials(pairs, gapsize_ms=10000, maxlen=20):
             continue
         for pivot2 in sorted(pairs[pivot1]):
             s=r(pivot1, pivot2, [], maxlen=maxlen)
-            # if the repeated segment is over 10 seconds long, add it to the candidate list
-            if s and sample_to_msec(max(s) - min(s)) > gapsize_ms:
+            if s:
                 l += s
                 prev_max = max(s)
 
-    sorted_list = sorted(set(l))
+    return sorted(set(l))
+
+def delete_overlaps(timestamps, gapsize_ms=10000):
     final = deque()
+    sorted_list = sorted(timestamps)
     start_pos = sorted_list[0]
     prev_pos = sorted_list[0]
 
-    # deduplicate overlapping segments
+    # do some clustering here to find approx. commercial length
+    # overlapping segments in groups
     for pos in sorted_list[1:]:
         if sample_to_msec(pos - prev_pos) > gapsize_ms:
             final.append((start_pos, prev_pos))
@@ -89,7 +92,6 @@ def search_for_silence(start, audiofile, step=-100, distance=-5000, threshold=10
     lo_start = min([start, start+step])
     lo_end = min([start+distance, start+distance+step])
     for a,b in zip(range(lo_start,lo_end,step),range(hi_start,hi_end,step)):
-        #print(f'{a}:{b} {audiofile[a:b].rms}')
         if audiofile[a:b].rms <= threshold:
             if step < 0:
                 return b
@@ -97,27 +99,31 @@ def search_for_silence(start, audiofile, step=-100, distance=-5000, threshold=10
                 return a
     return start
 
-def expand_commercial_silence(audiofile, final):
-    silence_threshold = db_to_float(40)
+def expand_commercial_silence(audiofile, commercial_list_sample, db_cutoff=20, step=50, distance=5000):
+    silence_threshold = db_to_float(db_cutoff)
 
     commercial_list = []
-    for s, e in final:
-        start=search_for_silence(sample_to_msec(s), threshold=silence_threshold)
-        end=search_for_silence(sample_to_msec(e), step=100, distance=5000, threshold=silence_threshold)
+    noncommercial_list = []
+    for s, e in commercial_list_sample:
+        start=search_for_silence(sample_to_msec(s), audiofile, distance=-distance, step=-step, threshold=silence_threshold)
+        end=search_for_silence(sample_to_msec(e), audiofile, step=step, distance=distance, threshold=silence_threshold)
         # figure out how close to a multiple of 30 this is
-        pct = ((end-start)/1000.0) / (30*round((end-start)/1000.0/30.0))
+        pct = (end-start)/1000.0/max([round((end-start)/1000.0/30.0)*30, 30])
         if abs(1.0-pct) < 0.03:
             print(f'{pct} {(end-start)/1000} {start} {sample_to_msec(s)-start} {end} {end-sample_to_msec(e)}')
             commercial_list.append((start,end))
-    return commercial_list
+        else:
+            print(f'noncommercial {pct} {(end-start)/1000} {start} {sample_to_msec(s)-start} {end} {end-sample_to_msec(e)}')
+            noncommercial_list.append((start,end))
+    return commercial_list, noncommercial_list
 
-def get_commercial_audio(audiofile, commercial_list):
+def get_commercial_audio(audiofile, commercial_list_msec):
     commercials = AudioSegment.empty()
     allelse = AudioSegment.empty()
     marker = 0
-    for a, b in sorted(commercial_list):
-        allelse += audiofile[sample_to_msec(marker):sample_to_msec(a-1)]
-        commercials += audiofile[sample_to_msec(a):sample_to_msec(b)]
+    for a, b in sorted(commercial_list_msec):
+        allelse += audiofile[marker:a-1]
+        commercials += audiofile[a:b]
         marker = b+1
     return allelse, commercials
 

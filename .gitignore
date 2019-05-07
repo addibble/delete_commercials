@@ -1,0 +1,13 @@
+.*sw*
+.ipynb_checkpoints/*
+__pycache__
+pyenv.cfg
+bin
+etc
+hashes/*
+input/*
+lib
+lib64
+share
+pyvenv.cfg
+*.ipynb
